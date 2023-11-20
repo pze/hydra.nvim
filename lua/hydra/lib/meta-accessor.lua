@@ -1,6 +1,13 @@
 local class = require('hydra.lib.class')
 local api = vim.api
 
+local nvim_buf_get_option = function(buf, opt)
+   if not buf or buf == 0 then
+      buf = api.nvim_get_current_buf()
+   end
+   return api.nvim_get_option_value(opt, { buf = buf })
+end
+
 ---@class hydra.MetaAccessor.original
 ---@field o table<string, any>
 ---@field go table<string, any>
@@ -22,7 +29,7 @@ function ma:initialize(augroup)
    self.original = {}
 
    self.o = self:make_meta_accessor(
-      ---@param opt string
+   ---@param opt string
       function(opt)
          return api.nvim_get_option_value(opt, {})
       end,
@@ -38,7 +45,7 @@ function ma:initialize(augroup)
    )
 
    self.go = self:make_meta_accessor(
-      ---@param opt string
+   ---@param opt string
       function(opt)
          return api.nvim_get_option_value(opt, { scope = 'global' })
       end,
@@ -54,9 +61,9 @@ function ma:initialize(augroup)
    )
 
    self.bo = self:make_meta_accessor(
-      ---@param opt string
+   ---@param opt string
       function(opt)
-         return api.nvim_buf_get_option(0, opt)
+         return nvim_buf_get_option(0, opt)
       end,
 
       ---@param opt string
@@ -72,9 +79,12 @@ function ma:initialize(augroup)
    )
 
    self.wo = self:make_meta_accessor(
-      ---@param opt string
+   ---@param opt string
       function(opt)
-         return api.nvim_win_get_option(0, opt)
+         local winid = api.nvim_get_current_win()
+         return api.nvim_get_option_value(opt, {
+            win = winid,
+         })
       end,
 
       ---@param opt string
@@ -109,9 +119,11 @@ function ma:_set_buf_option(opt, val)
    self.original.bo[bufnr] = self.original.bo[bufnr] or {}
 
    if not self.original.bo[bufnr][opt] then
-      self.original.bo[bufnr][opt] = api.nvim_buf_get_option(bufnr, opt)
+      self.original.bo[bufnr][opt] = nvim_buf_get_option(bufnr, opt)
    end
-   api.nvim_buf_set_option(bufnr, opt, val)
+   api.nvim_set_option_value(opt, val, {
+      buf = bufnr,
+   })
 end
 
 ---@param opt string
@@ -121,13 +133,15 @@ function ma:_set_win_option(opt, val)
    self.original.wo = self.original.wo or {}
    self.original.wo[winnr] = self.original.wo[winnr] or {}
    if not self.original.wo[winnr][opt] then
-      self.original.wo[winnr][opt] = api.nvim_win_get_option(winnr, opt)
+      self.original.wo[winnr][opt] = api.nvim_get_option_value(opt, { win = winnr })
    end
-   api.nvim_win_set_option(winnr, opt, val)
+   api.nvim_set_option_value(opt, val, {
+      win = winnr,
+   })
 end
 
 function ma:restore()
-   for _, otype in ipairs({'o', 'go'}) do
+   for _, otype in ipairs({ 'o', 'go' }) do
       if self.original[otype] then
          for opt, val in pairs(self.original[otype]) do
             vim[otype][opt] = val
@@ -139,7 +153,9 @@ function ma:restore()
       for bufnr, opts in pairs(self.original.bo) do
          if api.nvim_buf_is_valid(bufnr) then
             for opt, val in pairs(opts) do
-               api.nvim_buf_set_option(bufnr, opt, val)
+               api.nvim_set_option_value(opt, val, {
+                  buf = bufnr
+               })
             end
          end
       end
@@ -149,7 +165,9 @@ function ma:restore()
       for winnr, opts in pairs(self.original.wo) do
          if api.nvim_win_is_valid(winnr) then
             for opt, val in pairs(opts) do
-               api.nvim_win_set_option(winnr, opt, val)
+               api.nvim_set_option_value(opt, val, {
+                  win = winnr,
+               })
             end
          end
       end
